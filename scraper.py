@@ -9,6 +9,8 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+import classify
+
 BASE = "https://selibeng.com"
 SOURCE = "selibeng"
 
@@ -263,10 +265,15 @@ def main():
             raise SystemExit("unknown category: " + category)
 
     conn = connect()
+    classify.migrate(conn)
     robots = load_robots()
 
     while True:
         run_once(conn, robots, categories, args.pages, args.debug)
+        try:
+            classify.run(conn, False)
+        except Exception as exc:
+            print("classify error: " + str(exc))
         if not args.watch:
             break
         time.sleep(args.interval)
