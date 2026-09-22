@@ -265,6 +265,9 @@ def main():
             raise SystemExit("unknown category: " + category)
 
     conn = connect()
+    # FIX: classify.py previously had no migrate() function — only connect() —
+    # so this line crashed with AttributeError before any scraping happened.
+    # classify.py now defines migrate() as an alias, so this works.
     classify.migrate(conn)
     robots = load_robots()
 

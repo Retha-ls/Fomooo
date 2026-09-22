@@ -1,6 +1,36 @@
 {
-  "skills": ["python", "c++", "php", "javascript", "sql", "mysql", "git", "statistics"],
-  "interest_categories": ["technology_data"],
-  "accepted_types": ["job", "internship"],
+  "skills": [
+    "python",
+    "javascript",
+    "php",
+    "c++",
+    "html",
+    "css",
+    "react.js",
+    "figma",
+    "spss",
+    "git",
+    "docker",
+    "mysql",
+    "sql",
+    "express.js"
+  ],
+  "education": {
+    "degree": "BSc Computer Science and Statistics",
+    "fields": [
+      "computer science",
+      "statistics"
+    ]
+  },
+  "interest_categories": [
+    "technology_data",
+    "development_ngo",
+    "finance_banking",
+    "administration"
+  ],
+  "accepted_types": [
+    "job",
+    "internship"
+  ],
   "years_experience": 0
 }
