@@ -1,0 +1,6 @@
+{
+    "alert_threshold": 40,
+    "scrape_interval": 600,
+    "telegram_enabled": false,
+    "max_alerts_per_run": 10
+}

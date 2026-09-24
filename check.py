@@ -35,9 +35,14 @@ def load_config():
         return {}
 
     try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        return json.loads(
+            CONFIG_PATH.read_text(encoding="utf-8")
+        )
     except (json.JSONDecodeError, OSError) as exc:
-        print("could not load alert_config.json: %s" % exc)
+        print(
+            "could not load alert_config.json: %s"
+            % exc
+        )
         return {}
 
 
@@ -70,12 +75,19 @@ def mark_alerted(conn, opp_id, score):
 
 def format_message(job, result):
     lines = [
-        "%d/100 %s" % (result["score"], job["title"]),
+        "%d/100 %s" % (
+            result["score"],
+            job["title"]
+        ),
         "[%s / %s]" % (
             job["opp_type"],
-            match.format_category(job["category"])
+            match.format_category(
+                job["category"]
+            )
         ),
-        "deadline: %s" % match.format_deadline(job["deadline"]),
+        "deadline: %s" % match.format_deadline(
+            job["deadline"]
+        ),
     ]
 
     skills = result["skills"]
@@ -87,7 +99,10 @@ def format_message(job, result):
     )
 
     if matched:
-        lines.append("matches: " + match.print_set(matched))
+        lines.append(
+            "matches: " +
+            match.print_set(matched)
+        )
 
     lines.append(job["source_url"])
 
@@ -99,9 +114,15 @@ def send_telegram(config, text):
     chat_id = config.get("telegram_chat_id")
 
     if not token or not chat_id:
-        return False, "telegram not configured in alert_config.json"
+        return False, (
+            "telegram not configured "
+            "in alert_config.json"
+        )
 
-    url = "https://api.telegram.org/bot%s/sendMessage" % token
+    url = (
+        "https://api.telegram.org/bot%s/sendMessage"
+        % token
+    )
 
     try:
         response = requests.post(
@@ -118,7 +139,9 @@ def send_telegram(config, text):
         data = response.json()
 
         if not data.get("ok"):
-            return False, "Telegram API returned ok=false"
+            return False, (
+                "Telegram API returned ok=false"
+            )
 
         return True, None
 
@@ -126,18 +149,34 @@ def send_telegram(config, text):
         return False, str(exc)
 
     except ValueError as exc:
-        return False, "invalid Telegram response: %s" % exc
-
-
-def log_alert(text):
-    with LOG_PATH.open("a", encoding="utf-8") as handle:
-        handle.write(
-            "--- %s ---\n%s\n\n"
-            % (now(), text)
+        return False, (
+            "invalid Telegram response: %s"
+            % exc
         )
 
 
-def run_alerts(conn, profile, config, threshold, dry_run):
+def log_alert(text):
+    with LOG_PATH.open(
+        "a",
+        encoding="utf-8"
+    ) as handle:
+
+        handle.write(
+            "--- %s ---\n%s\n\n"
+            % (
+                now(),
+                text
+            )
+        )
+
+
+def run_alerts(
+    conn,
+    profile,
+    config,
+    threshold,
+    dry_run
+):
     ensure_alerts_table(conn)
 
     posts = match.open_posts(conn)
@@ -148,17 +187,26 @@ def run_alerts(conn, profile, config, threshold, dry_run):
 
     for job in posts:
 
-        if already_alerted(conn, job["id"]):
+        if already_alerted(
+            conn,
+            job["id"]
+        ):
             skipped_seen += 1
             continue
 
-        result = match.calculate_score(job, profile)
+        result = match.calculate_score(
+            job,
+            profile
+        )
 
         if result["score"] < threshold:
             below_threshold += 1
             continue
 
-        text = format_message(job, result)
+        text = format_message(
+            job,
+            result
+        )
 
         if dry_run:
             print()
@@ -168,22 +216,42 @@ def run_alerts(conn, profile, config, threshold, dry_run):
 
             continue
 
-        log_alert(text)
-
-        ok, error = send_telegram(config, text)
+        ok, error = send_telegram(
+            config,
+            text
+        )
 
         if not ok:
             print(
-                "telegram not sent (%s), logged locally instead: %s"
-                % (error, job["title"])
+                "telegram not sent (%s), "
+                "logged locally instead: %s"
+                % (
+                    error,
+                    job["title"]
+                )
             )
-        else:
-            print("sent: %s" % job["title"])
+
+            log_alert(
+                "TELEGRAM FAILED\n%s\nERROR: %s"
+                % (
+                    text,
+                    error
+                )
+            )
+
+            continue
+
+        log_alert(text)
 
         mark_alerted(
             conn,
             job["id"],
             result["score"]
+        )
+
+        print(
+            "sent: %s"
+            % job["title"]
         )
 
         alerted += 1
@@ -200,7 +268,10 @@ def run_alerts(conn, profile, config, threshold, dry_run):
     )
 
     if dry_run:
-        print("dry run complete - no alerts were sent or recorded")
+        print(
+            "dry run complete - "
+            "no alerts were sent or recorded"
+        )
     else:
         print(
             "%d new alerts processed this run"
@@ -259,39 +330,56 @@ def run_pipeline(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="FOMOOO opportunity monitoring and alert pipeline"
+        description=(
+            "FOMOOO opportunity monitoring "
+            "and alert pipeline"
+        )
     )
 
     parser.add_argument(
         "--threshold",
         type=int,
         default=40,
-        help="minimum score required to trigger an alert"
+        help=(
+            "minimum score required "
+            "to trigger an alert"
+        )
     )
 
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="preview alerts without sending or recording them"
+        help=(
+            "preview alerts without sending "
+            "or recording them"
+        )
     )
 
     parser.add_argument(
         "--skip-scrape",
         action="store_true",
-        help="use the existing database without scraping"
+        help=(
+            "use the existing database "
+            "without scraping"
+        )
     )
 
     parser.add_argument(
         "--watch",
         action="store_true",
-        help="repeat the pipeline continuously"
+        help=(
+            "repeat the pipeline continuously"
+        )
     )
 
     parser.add_argument(
         "--interval",
         type=int,
         default=600,
-        help="seconds between watch runs (default: 600)"
+        help=(
+            "seconds between watch runs "
+            "(default: 600)"
+        )
     )
 
     args = parser.parse_args()
@@ -301,11 +389,16 @@ def main():
         return
 
     if args.interval < 1:
-        print("interval must be at least 1 second")
+        print(
+            "interval must be at least 1 second"
+        )
         return
 
     print("FOMOOO opportunity monitor")
-    print("threshold: %d" % args.threshold)
+    print(
+        "threshold: %d"
+        % args.threshold
+    )
 
     if args.dry_run:
         print("mode: DRY RUN")
@@ -316,18 +409,26 @@ def main():
         print("scraping: ENABLED")
 
     if args.watch:
-        print("watch interval: %d seconds" % args.interval)
+        print(
+            "watch interval: %d seconds"
+            % args.interval
+        )
 
     print()
 
     while True:
 
         try:
-            print("=== pipeline run: %s ===" % now())
+            print(
+                "=== pipeline run: %s ==="
+                % now()
+            )
 
             run_pipeline(args)
 
-            print("=== pipeline run complete ===")
+            print(
+                "=== pipeline run complete ==="
+            )
 
         except KeyboardInterrupt:
             print()
@@ -336,7 +437,10 @@ def main():
 
         except Exception as exc:
             print()
-            print("pipeline error: %s" % exc)
+            print(
+                "pipeline error: %s"
+                % exc
+            )
 
             if not args.watch:
                 raise
@@ -346,7 +450,8 @@ def main():
 
         print()
         print(
-            "waiting %d seconds until the next run..."
+            "waiting %d seconds until "
+            "the next run..."
             % args.interval
         )
 
