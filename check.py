@@ -1,6 +1,5 @@
 import argparse
 import json
-import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,8 +11,7 @@ import match
 
 
 FOLDER = Path(__file__).parent
-DB_PATH = FOLDER / "opportunities.db"
-CONFIG_PATH = FOLDER / "alert_config.json"
+CONFIG_PATH = FOLDER / "config.json"
 LOG_PATH = FOLDER / "alerts.log"
 
 
@@ -32,15 +30,17 @@ def now():
 
 def load_config():
     if not CONFIG_PATH.exists():
+        print("could not find config.json")
         return {}
 
     try:
         return json.loads(
             CONFIG_PATH.read_text(encoding="utf-8")
         )
+
     except (json.JSONDecodeError, OSError) as exc:
         print(
-            "could not load alert_config.json: %s"
+            "could not load config.json: %s"
             % exc
         )
         return {}
@@ -115,8 +115,8 @@ def send_telegram(config, text):
 
     if not token or not chat_id:
         return False, (
-            "telegram not configured "
-            "in alert_config.json"
+            "Telegram credentials are missing "
+            "from config.json"
         )
 
     url = (
@@ -185,7 +185,20 @@ def run_alerts(
     skipped_seen = 0
     below_threshold = 0
 
+    max_alerts = config.get(
+        "max_alerts_per_run",
+        10
+    )
+
+    telegram_enabled = config.get(
+        "telegram_enabled",
+        False
+    )
+
     for job in posts:
+
+        if max_alerts > 0 and alerted >= max_alerts:
+            break
 
         if already_alerted(
             conn,
@@ -213,6 +226,20 @@ def run_alerts(
             print("would alert (dry run):")
             print(text)
             print()
+
+            continue
+
+        if not telegram_enabled:
+            print(
+                "telegram disabled, "
+                "logged locally: %s"
+                % job["title"]
+            )
+
+            log_alert(
+                "TELEGRAM DISABLED\n%s"
+                % text
+            )
 
             continue
 
@@ -265,6 +292,11 @@ def run_alerts(
     print(
         "%d opportunities below threshold"
         % below_threshold
+    )
+
+    print(
+        "maximum alerts per run: %d"
+        % max_alerts
     )
 
     if dry_run:
@@ -329,6 +361,18 @@ def run_pipeline(args):
 
 
 def main():
+    config = load_config()
+
+    config_threshold = config.get(
+        "alert_threshold",
+        40
+    )
+
+    config_interval = config.get(
+        "scrape_interval",
+        600
+    )
+
     parser = argparse.ArgumentParser(
         description=(
             "FOMOOO opportunity monitoring "
@@ -339,10 +383,11 @@ def main():
     parser.add_argument(
         "--threshold",
         type=int,
-        default=40,
+        default=None,
         help=(
             "minimum score required "
-            "to trigger an alert"
+            "to trigger an alert "
+            "(default: config.json)"
         )
     )
 
@@ -375,14 +420,20 @@ def main():
     parser.add_argument(
         "--interval",
         type=int,
-        default=600,
+        default=None,
         help=(
             "seconds between watch runs "
-            "(default: 600)"
+            "(default: config.json)"
         )
     )
 
     args = parser.parse_args()
+
+    if args.threshold is None:
+        args.threshold = config_threshold
+
+    if args.interval is None:
+        args.interval = config_interval
 
     if args.threshold < 0:
         print("threshold cannot be negative")
@@ -398,6 +449,26 @@ def main():
     print(
         "threshold: %d"
         % args.threshold
+    )
+
+    print(
+        "telegram: %s"
+        % (
+            "ENABLED"
+            if config.get(
+                "telegram_enabled",
+                False
+            )
+            else "DISABLED"
+        )
+    )
+
+    print(
+        "max alerts per run: %d"
+        % config.get(
+            "max_alerts_per_run",
+            10
+        )
     )
 
     if args.dry_run:

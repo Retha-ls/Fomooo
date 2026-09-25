@@ -1,6 +1,19 @@
 {
     "alert_threshold": 40,
     "scrape_interval": 600,
-    "telegram_enabled": false,
-    "max_alerts_per_run": 10
+    "telegram_enabled": true,
+    "max_alerts_per_run": 10,
+    "telegram_bot_token": "8852940615:AAGcjHKvJlOsG3hR_QhhNmdZsEDDCdpnWpo",
+    "telegram_chat_id": "1559471697",
+    "scrape_categories": [
+        "jobs",
+        "internships",
+        "scholarships",
+        "international",
+        "training",
+        "competitions",
+        "freelance",
+        "entrepreneurs"
+    ],
+    "pages_per_category": 3
 }
