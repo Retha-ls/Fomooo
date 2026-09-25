@@ -99,6 +99,67 @@ PROFILE_SKILL_ALIASES = {
 }
 
 
+SKILL_RELATIONSHIPS = {
+    "mysql": {
+        "sql": 0.90
+    },
+
+    "postgresql": {
+        "sql": 0.90
+    },
+
+    "sql server": {
+        "sql": 0.90
+    },
+
+    "react.js": {
+        "javascript": 0.80
+    },
+
+    "node.js": {
+        "javascript": 0.80
+    },
+
+    "express.js": {
+        "javascript": 0.80
+    },
+
+    "react native": {
+        "javascript": 0.80
+    },
+
+    "spss": {
+        "data analysis": 0.70
+    },
+
+    "statistics": {
+        "data analysis": 0.55
+    },
+
+    "pandas": {
+        "data analysis": 0.90
+    },
+
+    "numpy": {
+        "data analysis": 0.60
+    },
+
+    "power bi": {
+        "data analysis": 0.90
+    },
+
+    "tableau": {
+        "data analysis": 0.90
+    },
+
+    "python": {
+        "data analysis": 0.40,
+        "data science": 0.35,
+        "machine learning": 0.30
+    }
+}
+
+
 CATEGORY_LABELS = {
     "technology_data": "Technology / Data",
     "engineering_trades": "Engineering / Trades",
@@ -979,7 +1040,6 @@ def experience_result(job, profile):
     )
 
     if required is None:
-
         return {
             "required": None,
             "user": user_years,
@@ -989,38 +1049,37 @@ def experience_result(job, profile):
             "status": "not stated"
         }
 
-    gap = required - user_years
-
-    if gap <= 0:
-
+    if required <= 0:
         return {
             "required": required,
             "user": user_years,
             "gap": 0,
             "factor": 1.0,
             "score": 15,
-            "status": "meets requirement"
+            "status": "no experience required"
         }
 
-    if gap == 1:
+    gap = required - user_years
 
-        factor = 0.90
+    if gap <= 0:
+        factor = 1.0
+        status = "meets requirement"
+
+    elif gap == 1:
+        factor = 0.80
+        status = "minor experience gap"
 
     elif gap == 2:
-
-        factor = 0.75
+        factor = 0.65
+        status = "experience gap"
 
     elif gap == 3:
-
-        factor = 0.60
-
-    elif gap == 4:
-
-        factor = 0.45
+        factor = 0.55
+        status = "experience gap"
 
     else:
-
-        factor = 0.30
+        factor = 0.35
+        status = "significant experience gap"
 
     return {
         "required": required,
@@ -1028,7 +1087,7 @@ def experience_result(job, profile):
         "gap": gap,
         "factor": factor,
         "score": 15 * factor,
-        "status": "experience gap"
+        "status": status
     }
 
 
@@ -1127,6 +1186,103 @@ def format_deadline(deadline):
     )
 
 
+def find_best_related_match(
+    profile_skills,
+    target_skill
+):
+    best_profile_skill = None
+    best_weight = 0
+
+    for profile_skill in profile_skills:
+
+        relationships = SKILL_RELATIONSHIPS.get(
+            profile_skill,
+            {}
+        )
+
+        weight = relationships.get(
+            target_skill
+        )
+
+        if weight is None:
+            continue
+
+        if weight > best_weight:
+
+            best_weight = weight
+            best_profile_skill = profile_skill
+
+    if best_profile_skill is None:
+
+        return None
+
+    return {
+        "profile_skill": best_profile_skill,
+        "target_skill": target_skill,
+        "weight": best_weight
+    }
+
+
+def calculate_related_skill_matches(
+    job_skills,
+    profile_skills
+):
+    result = {
+        "required": {},
+        "preferred": {},
+        "technical": {}
+    }
+
+    for section in [
+        "required",
+        "preferred",
+        "technical"
+    ]:
+
+        for target_skill in job_skills[section]:
+
+            if target_skill in profile_skills:
+                continue
+
+            related = find_best_related_match(
+                profile_skills,
+                target_skill
+            )
+
+            if related:
+
+                result[section][
+                    target_skill
+                ] = related
+
+    return result
+
+
+def calculate_weighted_skill_ratio(
+    skills,
+    exact_matches,
+    related_matches
+):
+    if not skills:
+        return 0
+
+    total = 0
+
+    for skill in skills:
+
+        if skill in exact_matches:
+
+            total += 1
+
+        elif skill in related_matches:
+
+            total += related_matches[
+                skill
+            ]["weight"]
+
+    return total / len(skills)
+
+
 def calculate_skill_result(
     job_skills,
     profile_skills
@@ -1147,105 +1303,208 @@ def calculate_skill_result(
         profile_skills
     )
 
+    related_matches = calculate_related_skill_matches(
+        job_skills,
+        profile_skills
+    )
+
+    related_required = related_matches[
+        "required"
+    ]
+
+    related_preferred = related_matches[
+        "preferred"
+    ]
+
+    related_technical = related_matches[
+        "technical"
+    ]
+
     missing_required = (
         required -
-        profile_skills
+        matched_required -
+        set(related_required.keys())
     )
 
     missing_preferred = (
         preferred -
-        profile_skills
+        matched_preferred -
+        set(related_preferred.keys())
     )
 
     missing_technical = (
         technical -
-        profile_skills
+        matched_technical -
+        set(related_technical.keys())
     )
+
+    required_exact_ratio = 0
+    required_related_ratio = 0
+
+    preferred_exact_ratio = 0
+    preferred_related_ratio = 0
+
+    technical_exact_ratio = 0
+    technical_related_ratio = 0
 
     if required:
 
-        required_ratio = (
+        required_exact_ratio = (
             len(matched_required) /
             len(required)
         )
 
-    else:
-
-        required_ratio = 0
+        required_related_ratio = (
+            sum(
+                item["weight"]
+                for item in related_required.values()
+            ) /
+            len(required)
+        )
 
     if preferred:
 
-        preferred_ratio = (
+        preferred_exact_ratio = (
             len(matched_preferred) /
             len(preferred)
         )
 
-    else:
-
-        preferred_ratio = 0
+        preferred_related_ratio = (
+            sum(
+                item["weight"]
+                for item in related_preferred.values()
+            ) /
+            len(preferred)
+        )
 
     if technical:
 
-        technical_ratio = (
+        technical_exact_ratio = (
             len(matched_technical) /
             len(technical)
         )
 
-    else:
+        technical_related_ratio = (
+            sum(
+                item["weight"]
+                for item in related_technical.values()
+            ) /
+            len(technical)
+        )
 
-        technical_ratio = 0
+    required_score = (
+        required_exact_ratio +
+        required_related_ratio
+    )
+
+    preferred_score = (
+        preferred_exact_ratio +
+        preferred_related_ratio
+    )
+
+    technical_score = (
+        technical_exact_ratio +
+        technical_related_ratio
+    )
+
+    required_score = min(
+        1,
+        required_score
+    )
+
+    preferred_score = min(
+        1,
+        preferred_score
+    )
+
+    technical_score = min(
+        1,
+        technical_score
+    )
 
     if required:
 
         score = (
-            required_ratio * 0.75 +
-            preferred_ratio * 0.10 +
-            technical_ratio * 0.15
+            required_score * 0.75 +
+            preferred_score * 0.10 +
+            technical_score * 0.15
         )
 
     elif preferred:
 
         score = (
-            preferred_ratio * 0.65 +
-            technical_ratio * 0.35
+            preferred_score * 0.65 +
+            technical_score * 0.35
         )
 
     elif technical:
 
-        score = technical_ratio
+        score = technical_score
 
     else:
 
         score = 0
 
-    required_penalty = 0
+    required_gap_ratio = 0
 
     if required:
 
-        missing_ratio = (
-            len(missing_required) /
-            len(required)
+        required_coverage = (
+            required_exact_ratio +
+            required_related_ratio
         )
 
-        required_penalty = (
-            missing_ratio * 0.25
+        required_coverage = min(
+            1,
+            required_coverage
         )
+
+        required_gap_ratio = (
+            1 -
+            required_coverage
+        )
+
+    required_penalty = (
+        required_gap_ratio *
+        0.25
+    )
 
     return {
         "score": score,
+
         "required": required,
         "preferred": preferred,
         "technical": technical,
+
         "incidental": job_skills["incidental"],
+
         "matched_required": matched_required,
         "matched_preferred": matched_preferred,
         "matched_technical": matched_technical,
+
+        "related_required": related_required,
+        "related_preferred": related_preferred,
+        "related_technical": related_technical,
+
         "missing_required": missing_required,
         "missing_preferred": missing_preferred,
         "missing_technical": missing_technical,
-        "required_ratio": required_ratio,
-        "preferred_ratio": preferred_ratio,
-        "technical_ratio": technical_ratio,
+
+        "required_ratio": required_score,
+        "preferred_ratio": preferred_score,
+        "technical_ratio": technical_score,
+
+        "required_exact_ratio": required_exact_ratio,
+        "required_related_ratio": required_related_ratio,
+
+        "preferred_exact_ratio": preferred_exact_ratio,
+        "preferred_related_ratio": preferred_related_ratio,
+
+        "technical_exact_ratio": technical_exact_ratio,
+        "technical_related_ratio": technical_related_ratio,
+
+        "required_gap_ratio": required_gap_ratio,
+
         "required_penalty": required_penalty
     }
 
@@ -1329,6 +1588,15 @@ def calculate_score(job, profile):
         ) or
         bool(
             skills["matched_technical"]
+        ) or
+        bool(
+            skills["related_required"]
+        ) or
+        bool(
+            skills["related_preferred"]
+        ) or
+        bool(
+            skills["related_technical"]
         )
     )
 
@@ -1353,25 +1621,10 @@ def calculate_score(job, profile):
 
     if skills["required"]:
 
-        missing_count = len(
-            skills["missing_required"]
+        required_penalty = (
+            skills["required_gap_ratio"] *
+            20
         )
-
-        required_count = len(
-            skills["required"]
-        )
-
-        if missing_count > 0:
-
-            missing_ratio = (
-                missing_count /
-                required_count
-            )
-
-            required_penalty = (
-                missing_ratio *
-                20
-            )
 
     raw_score -= required_penalty
 
@@ -1467,6 +1720,24 @@ def calculate_score(job, profile):
 
         evidence.append(
             "technical context"
+        )
+
+    if skills["related_required"]:
+
+        evidence.append(
+            "related required skill"
+        )
+
+    if skills["related_preferred"]:
+
+        evidence.append(
+            "related preferred skill"
+        )
+
+    if skills["related_technical"]:
+
+        evidence.append(
+            "related technical context"
         )
 
     if education["matched"]:
@@ -1602,6 +1873,33 @@ def format_education_requirement(requirement):
     return options[0]
 
 
+def format_related_matches(related_matches):
+    results = []
+
+    for target_skill, data in sorted(
+        related_matches.items()
+    ):
+
+        profile_skill = data[
+            "profile_skill"
+        ]
+
+        weight = round(
+            data["weight"] * 100
+        )
+
+        results.append(
+            profile_skill +
+            " -> " +
+            target_skill +
+            " (" +
+            str(weight) +
+            "% support)"
+        )
+
+    return results
+
+
 def show_ranking(conn, profile):
     rows = open_posts(conn)
 
@@ -1688,7 +1986,7 @@ def show_ranking(conn, profile):
 
         skills = result["skills"]
 
-        matched = (
+        exact_matched = (
             skills["matched_required"] |
             skills["matched_preferred"] |
             skills["matched_technical"]
@@ -1699,18 +1997,51 @@ def show_ranking(conn, profile):
             skills["missing_preferred"]
         )
 
-        if matched:
+        if exact_matched:
 
             print(
                 "   skills matched: " +
-                print_set(matched)
+                print_set(
+                    exact_matched
+                )
+            )
+
+        related_display = []
+
+        related_display.extend(
+            format_related_matches(
+                skills["related_required"]
+            )
+        )
+
+        related_display.extend(
+            format_related_matches(
+                skills["related_preferred"]
+            )
+        )
+
+        related_display.extend(
+            format_related_matches(
+                skills["related_technical"]
+            )
+        )
+
+        if related_display:
+
+            print(
+                "   related skills: " +
+                "; ".join(
+                    related_display
+                )
             )
 
         if missing:
 
             print(
                 "   skills missing: " +
-                print_set(missing)
+                print_set(
+                    missing
+                )
             )
 
         if result["matched_education"]:
@@ -1758,297 +2089,368 @@ def show_ranking(conn, profile):
         print()
 
 
-def show_why(conn, profile, term):
-    rows = conn.execute(
+def show_why(conn, profile, opportunity_id):
+    job = conn.execute(
         """
         SELECT *
         FROM opportunities
-        WHERE duplicate_of IS NULL
-        AND (
-            title LIKE ?
-            OR company LIKE ?
-            OR description LIKE ?
-        )
-        ORDER BY id DESC
+        WHERE id = ?
+        AND duplicate_of IS NULL
         """,
-        (
-            "%" + term + "%",
-            "%" + term + "%",
-            "%" + term + "%"
-        )
-    ).fetchall()
+        (opportunity_id,)
+    ).fetchone()
 
-    if not rows:
+    if not job:
 
         print(
-            "No opportunity found for: " +
-            term
+            "No opportunity found for ID: " +
+            str(opportunity_id)
         )
 
         return
 
-    for job in rows:
+    result = calculate_score(
+        job,
+        profile
+    )
 
-        result = calculate_score(
-            job,
-            profile
+    print()
+    print("=" * 70)
+    print(job["title"])
+    print("=" * 70)
+
+    print(
+        "Score: " +
+        str(result["score"]) +
+        "/100"
+    )
+
+    print(
+        "Type: " +
+        str(job["opp_type"])
+    )
+
+    print(
+        "Category: " +
+        format_category(
+            job["category"]
         )
+    )
 
-        print()
-        print("=" * 70)
-        print(job["title"])
-        print("=" * 70)
-
-        print(
-            "Score: " +
-            str(result["score"]) +
-            "/100"
+    print(
+        "Deadline: " +
+        format_deadline(
+            job["deadline"]
         )
+    )
 
-        print(
-            "Type: " +
-            str(job["opp_type"])
-        )
+    print()
 
-        print(
-            "Category: " +
-            format_category(
-                job["category"]
+    print("SCORE BREAKDOWN")
+    print("-" * 50)
+
+    print(
+        "  Skills: " +
+        str(
+            round(
+                result["skill_component"],
+                2
+            )
+        ) +
+        "/40"
+    )
+
+    print(
+        "  Education: " +
+        str(
+            round(
+                result["education_component"],
+                2
+            )
+        ) +
+        "/30"
+    )
+
+    print(
+        "  Experience: " +
+        str(
+            round(
+                result["experience_component"],
+                2
+            )
+        ) +
+        "/15"
+    )
+
+    print(
+        "  Category: " +
+        str(
+            result["category_component"]
+        ) +
+        "/10"
+    )
+
+    print(
+        "  Opportunity type: " +
+        str(
+            result["type_component"]
+        ) +
+        "/5"
+    )
+
+    print(
+        "  Required skill penalty: -" +
+        str(
+            round(
+                result["required_skill_penalty"],
+                2
             )
         )
+    )
 
-        print(
-            "Deadline: " +
-            format_deadline(
-                job["deadline"]
+    print(
+        "  Raw score: " +
+        str(
+            round(
+                result["raw_score"],
+                2
             )
         )
+    )
 
-        print()
-
-        print("SCORE BREAKDOWN")
-        print("-" * 50)
+    if result["evidence_cap"] is not None:
 
         print(
-            "  Skills: " +
+            "  Evidence cap: " +
             str(
                 round(
-                    result["skill_component"],
-                    2
-                )
-            ) +
-            "/40"
-        )
-
-        print(
-            "  Education: " +
-            str(
-                round(
-                    result["education_component"],
-                    2
-                )
-            ) +
-            "/30"
-        )
-
-        print(
-            "  Experience: " +
-            str(
-                round(
-                    result["experience_component"],
-                    2
-                )
-            ) +
-            "/15"
-        )
-
-        print(
-            "  Category: " +
-            str(
-                result["category_component"]
-            ) +
-            "/10"
-        )
-
-        print(
-            "  Opportunity type: " +
-            str(
-                result["type_component"]
-            ) +
-            "/5"
-        )
-
-        print(
-            "  Required skill penalty: -" +
-            str(
-                round(
-                    result["required_skill_penalty"],
-                    2
-                )
-            )
-        )
-
-        print(
-            "  Raw score: " +
-            str(
-                round(
-                    result["raw_score"],
-                    2
-                )
-            )
-        )
-
-        if result["evidence_cap"] is not None:
-
-            print(
-                "  Evidence cap: " +
-                str(
-                    round(
-                        result["evidence_cap"],
-                        2
-                    )
-                )
-            )
-
-            print(
-                "  Cap reason: " +
-                result["evidence_cap_reason"]
-            )
-
-        print(
-            "  Final score before deadline: " +
-            str(
-                round(
-                    result["base_score"],
+                    result["evidence_cap"],
                     2
                 )
             )
         )
 
         print(
-            "  Experience factor: " +
-            str(
-                result["experience"]["factor"]
+            "  Cap reason: " +
+            result["evidence_cap_reason"]
+        )
+
+    print(
+        "  Final score before deadline: " +
+        str(
+            round(
+                result["base_score"],
+                2
+            )
+        )
+    )
+
+    print(
+        "  Experience factor: " +
+        str(
+            result["experience"]["factor"]
+        )
+    )
+
+    print()
+
+    print("SKILLS")
+
+    skills = result["skills"]
+
+    if skills["required"]:
+
+        print(
+            "  Required: " +
+            print_set(
+                skills["required"]
             )
         )
 
-        print()
+    if skills["preferred"]:
 
-        print("SKILLS")
-
-        skills = result["skills"]
-
-        if skills["required"]:
-
-            print(
-                "  Required: " +
-                print_set(
-                    skills["required"]
-                )
+        print(
+            "  Preferred: " +
+            print_set(
+                skills["preferred"]
             )
+        )
 
-        if skills["preferred"]:
+    if skills["technical"]:
 
-            print(
-                "  Preferred: " +
-                print_set(
-                    skills["preferred"]
-                )
+        print(
+            "  Technical context: " +
+            print_set(
+                skills["technical"]
             )
+        )
 
-        if skills["technical"]:
+    if skills["incidental"]:
 
-            print(
-                "  Technical context: " +
-                print_set(
-                    skills["technical"]
-                )
+        print(
+            "  Incidental mentions: " +
+            print_set(
+                skills["incidental"]
             )
+        )
 
-        if skills["incidental"]:
+    if skills["matched_required"]:
 
-            print(
-                "  Incidental mentions: " +
-                print_set(
-                    skills["incidental"]
-                )
+        print(
+            "  Required matched: " +
+            print_set(
+                skills["matched_required"]
             )
+        )
 
-        if skills["matched_required"]:
+    else:
 
-            print(
-                "  Required matched: " +
-                print_set(
-                    skills["matched_required"]
-                )
+        print(
+            "  Required matched: none"
+        )
+
+    if skills["matched_preferred"]:
+
+        print(
+            "  Preferred matched: " +
+            print_set(
+                skills["matched_preferred"]
             )
+        )
 
-        else:
+    if skills["matched_technical"]:
 
-            print(
-                "  Required matched: none"
+        print(
+            "  Technical context matched: " +
+            print_set(
+                skills["matched_technical"]
             )
+        )
 
-        if skills["matched_preferred"]:
+    if skills["related_required"]:
 
-            print(
-                "  Preferred matched: " +
-                print_set(
-                    skills["matched_preferred"]
-                )
-            )
+        print(
+            "  Required related matches:"
+        )
 
-        if skills["matched_technical"]:
-
-            print(
-                "  Technical context matched: " +
-                print_set(
-                    skills["matched_technical"]
-                )
-            )
-
-        if skills["missing_required"]:
-
-            print(
-                "  Required missing: " +
-                print_set(
-                    skills["missing_required"]
-                )
-            )
-
-        if skills["missing_preferred"]:
-
-            print(
-                "  Preferred missing: " +
-                print_set(
-                    skills["missing_preferred"]
-                )
-            )
-
-        if (
-            not skills["required"] and
-            not skills["preferred"] and
-            not skills["technical"]
+        for item in format_related_matches(
+            skills["related_required"]
         ):
 
             print(
-                "  No clear skill information detected"
+                "    " +
+                item
             )
 
-        print()
+    if skills["related_preferred"]:
 
-        print("EDUCATION")
+        print(
+            "  Preferred related matches:"
+        )
 
-        education = result["education"]
-
-        if education["requirements"]:
+        for item in format_related_matches(
+            skills["related_preferred"]
+        ):
 
             print(
-                "  Detected requirements:"
+                "    " +
+                item
+            )
+
+    if skills["related_technical"]:
+
+        print(
+            "  Technical related matches:"
+        )
+
+        for item in format_related_matches(
+            skills["related_technical"]
+        ):
+
+            print(
+                "    " +
+                item
+            )
+
+    if skills["missing_required"]:
+
+        print(
+            "  Required missing: " +
+            print_set(
+                skills["missing_required"]
+            )
+        )
+
+    if skills["missing_preferred"]:
+
+        print(
+            "  Preferred missing: " +
+            print_set(
+                skills["missing_preferred"]
+            )
+        )
+
+    if (
+        not skills["required"] and
+        not skills["preferred"] and
+        not skills["technical"]
+    ):
+
+        print(
+            "  No clear skill information detected"
+        )
+
+    print()
+
+    print("EDUCATION")
+
+    education = result["education"]
+
+    if education["requirements"]:
+
+        print(
+            "  Detected requirements:"
+        )
+
+        for requirement in education[
+            "requirements"
+        ]:
+
+            print(
+                "    " +
+                format_education_requirement(
+                    requirement
+                )
+            )
+
+        print(
+            "  Satisfied: " +
+            str(
+                education["satisfied"]
+            ) +
+            "/" +
+            str(
+                education["total"]
+            )
+        )
+
+        if education["matched"]:
+
+            print(
+                "  Your matching fields: " +
+                print_set(
+                    education["matched"]
+                )
+            )
+
+        if education["missing"]:
+
+            print(
+                "  Missing education requirements:"
             )
 
             for requirement in education[
-                "requirements"
+                "missing"
             ]:
 
                 print(
@@ -2058,173 +2460,136 @@ def show_why(conn, profile, term):
                     )
                 )
 
-            print(
-                "  Satisfied: " +
-                str(
-                    education["satisfied"]
-                ) +
-                "/" +
-                str(
-                    education["total"]
-                )
-            )
-
-            if education["matched"]:
-
-                print(
-                    "  Your matching fields: " +
-                    print_set(
-                        education["matched"]
-                    )
-                )
-
-            if education["missing"]:
-
-                print(
-                    "  Missing education requirements:"
-                )
-
-                for requirement in education[
-                    "missing"
-                ]:
-
-                    print(
-                        "    " +
-                        format_education_requirement(
-                            requirement
-                        )
-                    )
-
-        else:
-
-            print(
-                "  No clear education requirement detected"
-            )
-
-        print()
-
-        print("EXPERIENCE")
-
-        experience = result["experience"]
-
-        if experience["required"] is None:
-
-            print(
-                "  No years of experience detected"
-            )
-
-            print(
-                "  Score: 0/15"
-            )
-
-        elif experience["gap"] > 0:
-
-            print(
-                "  Required: " +
-                str(
-                    experience["required"]
-                ) +
-                " years"
-            )
-
-            print(
-                "  Your experience: " +
-                str(
-                    experience["user"]
-                ) +
-                " years"
-            )
-
-            print(
-                "  Gap: " +
-                str(
-                    experience["gap"]
-                ) +
-                " years"
-            )
-
-            print(
-                "  Experience score: " +
-                str(
-                    round(
-                        result["experience_component"],
-                        2
-                    )
-                ) +
-                "/15"
-            )
-
-        else:
-
-            print(
-                "  Requirement met: " +
-                str(
-                    experience["required"]
-                ) +
-                " years"
-            )
-
-            print(
-                "  Experience score: 15/15"
-            )
-
-        print()
-
-        print("PROFILE FIT")
-
-        if result["category_ok"]:
-
-            print(
-                "  Category: MATCH (+10)"
-            )
-
-        else:
-
-            print(
-                "  Category: outside selected interests (+0)"
-            )
-
-        if result["type_ok"]:
-
-            print(
-                "  Opportunity type: accepted (+5)"
-            )
-
-        else:
-
-            print(
-                "  Opportunity type: not accepted (score = 0)"
-            )
-
-        print()
-
-        print("EVIDENCE")
-
-        if result["evidence"]:
-
-            for item in result["evidence"]:
-
-                print(
-                    "  + " +
-                    item
-                )
-
-        else:
-
-            print(
-                "  No direct profile evidence"
-            )
-
-        print()
-
-        print("URL")
+    else:
 
         print(
-            "  " +
-            job["source_url"]
+            "  No clear education requirement detected"
         )
 
-        print()
+    print()
+
+    print("EXPERIENCE")
+
+    experience = result["experience"]
+
+    if experience["required"] is None:
+
+        print(
+            "  No years of experience detected"
+        )
+
+        print(
+            "  Score: 0/15"
+        )
+
+    elif experience["gap"] > 0:
+
+        print(
+            "  Required: " +
+            str(
+                experience["required"]
+            ) +
+            " years"
+        )
+
+        print(
+            "  Your experience: " +
+            str(
+                experience["user"]
+            ) +
+            " years"
+        )
+
+        print(
+            "  Gap: " +
+            str(
+                experience["gap"]
+            ) +
+            " years"
+        )
+
+        print(
+            "  Experience score: " +
+            str(
+                round(
+                    result["experience_component"],
+                    2
+                )
+            ) +
+            "/15"
+        )
+
+    else:
+
+        print(
+            "  Requirement met: " +
+            str(
+                experience["required"]
+            ) +
+            " years"
+        )
+
+        print(
+            "  Experience score: 15/15"
+        )
+
+    print()
+
+    print("PROFILE FIT")
+
+    if result["category_ok"]:
+
+        print(
+            "  Category: MATCH (+10)"
+        )
+
+    else:
+
+        print(
+            "  Category: outside selected interests (+0)"
+        )
+
+    if result["type_ok"]:
+
+        print(
+            "  Opportunity type: accepted (+5)"
+        )
+
+    else:
+
+        print(
+            "  Opportunity type: not accepted (score = 0)"
+        )
+
+    print()
+
+    print("EVIDENCE")
+
+    if result["evidence"]:
+
+        for item in result["evidence"]:
+
+            print(
+                "  + " +
+                item
+            )
+
+    else:
+
+        print(
+            "  No direct profile evidence"
+        )
+
+    print()
+
+    print("URL")
+
+    print(
+        "  " +
+        job["source_url"]
+    )
+
+    print()
 
 
 def show_market(conn, profile):
@@ -2480,7 +2845,7 @@ def show_all(conn, profile):
 
         skills = result["skills"]
 
-        matched = (
+        exact_matched = (
             skills["matched_required"] |
             skills["matched_preferred"] |
             skills["matched_technical"]
@@ -2491,18 +2856,51 @@ def show_all(conn, profile):
             skills["missing_preferred"]
         )
 
-        if matched:
+        if exact_matched:
 
             print(
                 "   matched: " +
-                print_set(matched)
+                print_set(
+                    exact_matched
+                )
+            )
+
+        related_display = []
+
+        related_display.extend(
+            format_related_matches(
+                skills["related_required"]
+            )
+        )
+
+        related_display.extend(
+            format_related_matches(
+                skills["related_preferred"]
+            )
+        )
+
+        related_display.extend(
+            format_related_matches(
+                skills["related_technical"]
+            )
+        )
+
+        if related_display:
+
+            print(
+                "   related: " +
+                "; ".join(
+                    related_display
+                )
             )
 
         if missing:
 
             print(
                 "   missing: " +
-                print_set(missing)
+                print_set(
+                    missing
+                )
             )
 
         if result["matched_education"]:
@@ -2537,9 +2935,9 @@ def main():
 
     parser.add_argument(
         "--why",
-        type=str,
+        type=int,
         help=
-        "Explain why an opportunity matches"
+        "Explain why an opportunity matches using its ID"
     )
 
     parser.add_argument(
@@ -2580,7 +2978,7 @@ def main():
 
             return
 
-        if args.why:
+        if args.why is not None:
 
             show_why(
                 conn,
